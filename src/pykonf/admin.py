@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from fastapi import Request
 from nicegui import ui
 import json
+from typing import Dict
 
 users = [("user1", "pass1"), ("user2", "pass2")]
 session_info: Dict[str, Dict] = {}

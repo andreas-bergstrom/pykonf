@@ -6,6 +6,12 @@
 SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value python api.py
 ```
 
+Or after `pip install -e .`:
+
+```sh
+SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value pykonf
+```
+
 Required env vars: `SECRET_KEY` (checked at import time, absent raises).
 
 Config is seeded from `DATA_*` env vars at startup (underscore-separated keys → nested dict), then persisted to `CONFIG_FILE` (default `config.json`). `GET /config` returns current config; `PUT /config` updates it (deep-merge, rate-limited to 1/minute, requires `secret_key` header matching `SECRET_KEY`).

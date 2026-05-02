@@ -2,18 +2,36 @@
 
 Simple HTTP API to set and retrieve client configuration for web and mobile frontends.
 
-## Quick start
+## Install
 
 ```sh
-SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value python api.py
+pip install git+https://github.com/andreas-bergstrom/pykonf.git
+```
+
+Or install with optional admin UI:
+
+```sh
+pip install "pykonf[admin] @ git+https://github.com/andreas-bergstrom/pykonf.git"
+```
+
+## Usage
+
+```sh
+SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value pykonf
+```
+
+Or via `python -m`:
+
+```sh
+SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value python -m pykonf
 ```
 
 ## Endpoints
 
-| Method | Path       | Auth       | Rate limited | Description                    |
-|--------|------------|------------|--------------|--------------------------------|
-| GET    | `/health`  | No         | No           | Health check                   |
-| GET    | `/config`  | No         | No           | Returns current configuration  |
+| Method | Path       | Auth           | Rate limited | Description                    |
+|--------|------------|----------------|--------------|--------------------------------|
+| GET    | `/health`  | No             | No           | Health check                   |
+| GET    | `/config`  | No             | No           | Returns current configuration  |
 | PUT    | `/config`  | `secret_key` header | 1/minute | Merge partial update into config |
 
 ## Environment variables
