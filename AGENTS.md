@@ -14,25 +14,62 @@ SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value pykonf
 
 Required env vars: `SECRET_KEY` (checked at import time, absent raises).
 
-Config is seeded from `DATA_*` env vars at startup (underscore-separated keys → nested dict), then persisted to `CONFIG_FILE` (default `config.json`). `GET /config` returns current config; `PUT /config` updates it (deep-merge, rate-limited to 1/minute, requires `secret_key` header matching `SECRET_KEY`).
+Config is seeded from `DATA_*` env vars at startup (underscore-separated keys → nested dict), then persisted to `CONFIG_FILE` (default `config.json`).
 
-## Endpoints
+## REST API Endpoints
 
-- `GET /health` — health check
-- `GET /config` — returns current configuration (Cache-Control: max-age=60)
-- `PUT /config` — deep-merge partial update (rate-limited, requires `secret_key` header)
+All mutation endpoints (`PUT`, `POST`, `DELETE`) require a `secret_key` header matching `SECRET_KEY` and are rate-limited to 1/minute (shared across all mutations).
 
-## Known Issues
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/health` | — | Health check |
+| `GET` | `/config` | — | Returns full config (Cache-Control: max-age=60) |
+| `GET` | `/config/{path}` | — | Read nested value (e.g. `/config/featureflags/payment`) |
+| `PUT` | `/config` | `secret_key` | Deep-merge partial update |
+| `POST` | `/config/{path}` | `secret_key` | Set value at path. Body: `{"value": any}` or raw JSON |
+| `DELETE` | `/config/{path}` | `secret_key` | Remove key at path |
 
-- **Dead code in `admin.py`**: unused (init call removed), standalone nicegui-based admin UI
-- **No tests**, no CI, no lint config
-- **No `pyproject.toml` / `setup.py`** — not a standard Python package
-- **Pydantic v2** (`RootModel` with `root` field)
-- **`requirements.txt`** has many unused transitive deps (matplotlib, plotly, Pillow, pyobjc, etc.)
+## MCP Tools
+
+The MCP server runs on the same process at `/mcp` (Streamable HTTP transport). Connect from Claude Code, VS Code, or any MCP client.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `read_config` | `path` (optional) | Read full config or subtree at slash-separated path |
+| `list_keys` | `path` (optional) | List keys under a path |
+| `set_value` | `path`, `value`, `secret_key` | Set value at path |
+| `delete_key` | `path`, `secret_key` | Delete key at path |
+
+### Claude Code MCP configuration
+
+```json
+{
+  "mcpServers": {
+    "pykonf": {
+      "transport": "http",
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+Or via CLI:
+
+```sh
+claude mcp add --transport http pykonf http://localhost:8000/mcp
+```
+
+## Tests
+
+```sh
+bash test_api.sh
+# or directly:
+python -m pytest tests/ -v
+```
 
 ## Commands
 
 ```sh
-# format (only tool configured)
-black api.py admin.py
+# format
+black src/pykonf/
 ```

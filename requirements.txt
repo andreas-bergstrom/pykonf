@@ -1,7 +1,4 @@
-# Core dependencies (installed automatically via pip install pykonf)
 fastapi>=0.92.0
 pydantic>=2.0.0
 uvicorn>=0.20.0
-slowapi>=0.1.7
-
-# Optional: nicegui>=1.2.4  (install with: pip install pykonf[admin])
+fastmcp>=2

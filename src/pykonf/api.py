@@ -1,68 +1,26 @@
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Body, Header, Request
+from typing import Any
+from fastapi import FastAPI, HTTPException, Body, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import RootModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import json
-import os
-from typing import Dict, Union
+from starlette.routing import Mount, compile_path, Match
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
-if SECRET_KEY is None:
-    raise RuntimeError("SECRET_KEY environment variable is not set.")
+from pykonf import config as cfg
 
-CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
+try:
+    from pykonf.mcp import mcp_server
 
-
-def load_config() -> dict:
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE) as f:
-                config = json.load(f)
-        else:
-            config = {}
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Warning: could not load config file: {e}")
-        config = {}
-
-    for key, value in sorted(os.environ.items()):
-        if key.startswith("DATA_"):
-            levels = key.removeprefix("DATA_").split("_")
-            target = config
-            for level in levels[:-1]:
-                level = level.lower()
-                target = target.setdefault(level, {})
-            target[levels[-1].lower()] = value
-
-    return config
+    _mcp_asgi = mcp_server.http_app(path="/")
+    _has_mcp = True
+except ImportError:
+    _mcp_asgi = None
+    _has_mcp = False
 
 
-def save_config(config: dict) -> None:
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-
-
-def deep_merge(base: dict, update: dict) -> None:
-    for key, value in update.items():
-        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-            deep_merge(base[key], value)
-        else:
-            base[key] = value
-
-
-json_data = load_config()
-print(f"Loaded config: {json.dumps(json_data, indent=2)}")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
-
-
-app = FastAPI(lifespan=lifespan, title="pykonf", version="0.2.0")
+app = FastAPI(
+    lifespan=_mcp_asgi.lifespan if _has_mcp else None,
+    title="pykonf",
+    version="0.3.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,13 +30,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+if _has_mcp:
+
+    class _MCPMount(Mount):
+        def __init__(self, path):
+            super().__init__(path, app=self._proxy)
+            self.path_regex, _, _ = compile_path(self.path + "{path:path}")
+
+        async def _proxy(self, scope, receive, send):
+            remaining = scope.get("path_params", {}).get("path", "")
+            scope["path"] = "/" + remaining if remaining else "/"
+            scope["path"] = scope["path"].rstrip("/") or "/"
+            del scope["path_params"]
+            del scope["endpoint"]
+            await _mcp_asgi(scope, receive, send)
+
+        def matches(self, scope):
+            if scope["type"] not in ("http", "websocket"):
+                return Match.NONE, {}
+            route_path = scope.get("path", "")
+            root_path = scope.get("root_path", "")
+            if root_path and route_path.startswith(root_path):
+                route_path = route_path[len(root_path) :]
+            match = self.path_regex.match(route_path)
+            if match:
+                matched_params = match.groupdict()
+                child_scope = {
+                    "path_params": matched_params,
+                    "endpoint": self._proxy,
+                }
+                return Match.FULL, child_scope
+            return Match.NONE, {}
+
+    app.router.routes.append(_MCPMount("/mcp"))
+    print("MCP server mounted at /mcp")
 
 
-class JsonData(RootModel):
-    root: Dict[str, Union[str, "JsonData"]]
+def verify_secret(secret_key: str | None) -> None:
+    if secret_key != cfg.SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def mutate(do):
+    try:
+        cfg.check_mutation_rate()
+        do()
+        cfg.save_config(cfg.json_data)
+    except RuntimeError as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
 
 @app.get("/health")
@@ -89,32 +88,59 @@ async def health():
 @app.get("/config")
 async def read_config():
     return JSONResponse(
-        content=json_data,
+        content=cfg.json_data,
         media_type="application/json",
         headers={"Cache-Control": "max-age=60"},
     )
 
 
+@app.get("/config/{path:path}")
+async def read_config_path(path: str):
+    try:
+        value = cfg.get_at_path(cfg.json_data, path)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return JSONResponse(content=value, media_type="application/json")
+
+
 @app.put("/config")
-@limiter.limit("1/minute")
 async def update_config(
-    request: Request,
-    data: JsonData = Body(...),
-    secret_key: str = Header(None),
+    data: dict = Body(...),
+    secret_key: str | None = Header(None),
 ):
-    if secret_key != SECRET_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    update = data.model_dump(mode="json")
-    deep_merge(json_data, update)
-    save_config(json_data)
-
+    verify_secret(secret_key)
+    mutate(lambda: cfg.deep_merge(cfg.json_data, data))
     return {"message": "Configuration updated"}
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    return JSONResponse(content={"error": exc.detail}, status_code=exc.status_code)
+@app.post("/config/{path:path}")
+async def set_config_path(
+    path: str,
+    body: Any = Body(None),
+    secret_key: str | None = Header(None),
+):
+    verify_secret(secret_key)
+
+    if isinstance(body, dict) and "value" in body:
+        value = body["value"]
+    else:
+        value = body
+
+    mutate(lambda: cfg.set_at_path(cfg.json_data, path, value))
+    return {"message": "Configuration updated"}
+
+
+@app.delete("/config/{path:path}")
+async def delete_config_path(
+    path: str,
+    secret_key: str | None = Header(None),
+):
+    verify_secret(secret_key)
+    try:
+        mutate(lambda: cfg.delete_at_path(cfg.json_data, path))
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"message": "Configuration deleted"}
 
 
 def main():
