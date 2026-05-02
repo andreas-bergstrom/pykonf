@@ -1,59 +1,93 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Body, Header, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-# from starlette.middleware.sessions import SessionMiddleware
-from typing import Dict, Union
-from pydantic import BaseModel, ValidationError
+from pydantic import RootModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import json
 import os
+from typing import Dict, Union
 
-# from admin import init
-from nicegui import ui
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if SECRET_KEY is None:
+    raise RuntimeError("SECRET_KEY environment variable is not set.")
 
-# Secret key has to be set as environment variable
-if os.environ.get("SECRET_KEY") is None:
-    raise Exception("Environment variable SECRET_KEY is not set.")
-
-json_data = {}
-
-app = FastAPI()
-# init(app, json_data)
+CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
 
 
-# Initialize limiter
+def load_config() -> dict:
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE) as f:
+                config = json.load(f)
+        else:
+            config = {}
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Warning: could not load config file: {e}")
+        config = {}
+
+    for key, value in sorted(os.environ.items()):
+        if key.startswith("DATA_"):
+            levels = key.removeprefix("DATA_").split("_")
+            target = config
+            for level in levels[:-1]:
+                level = level.lower()
+                target = target.setdefault(level, {})
+            target[levels[-1].lower()] = value
+
+    return config
+
+
+def save_config(config: dict) -> None:
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def deep_merge(base: dict, update: dict) -> None:
+    for key, value in update.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+
+
+json_data = load_config()
+print(f"Loaded config: {json.dumps(json_data, indent=2)}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+
+
+app = FastAPI(lifespan=lifespan, title="pykonf", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-# Define Pydantic schema for JSON data
-class JsonData(BaseModel):
-    __root__: Dict[str, Union[str, "JsonData"]]
+class JsonData(RootModel):
+    root: Dict[str, Union[str, "JsonData"]]
 
 
-# Initialize json_data with environment variables beginning with "DATA_"
-for key, value in os.environ.items():
-    if key.startswith("DATA_"):
-        # Split key into levels separated by underscores
-        levels = key.replace("DATA_", "").split("_")
-        # Create nested dictionary
-        nested_dict = json_data
-        for level in levels[:-1]:
-            if level not in nested_dict:
-                nested_dict[level.lower()] = {}
-            nested_dict = nested_dict[level.lower()]
-        # Add value to nested dictionary
-        nested_dict[levels[-1].lower()] = value
-print(json_data)
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 @app.get("/config")
-async def read_json_data():
-    """
-    Returns the contents of the JSON data.
-    """
+async def read_config():
     return JSONResponse(
         content=json_data,
         media_type="application/json",
@@ -63,38 +97,19 @@ async def read_json_data():
 
 @app.put("/config")
 @limiter.limit("1/minute")
-async def update_json_data(
-    request: Request, data: JsonData = Body(...), secret_key: str = Header(None)
+async def update_config(
+    request: Request,
+    data: JsonData = Body(...),
+    secret_key: str = Header(None),
 ):
-    """
-    Updates the contents of the JSON data.
-    """
-    # Check if the secret header is present and has the correct value
-    if secret_key != os.environ.get("SECRET_KEY"):
+    if secret_key != SECRET_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # Validate incoming data against schema
-    try:
-        JsonData(**data.dict())
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=f"Validation error: {e}")
+    update = data.model_dump(mode="json")
+    deep_merge(json_data, update)
+    save_config(json_data)
 
-    # Merge existing data with incoming data
-    json_data.update(data)
-
-    return {"message": "JSON data updated successfully"}
-
-
-# Add auto-generated OpenAPI endpoint
-@app.get("/docs")
-async def get_docs():
-    return {"detail": "Documentation available at /redoc or /docs"}
-
-
-# Add auto-generated ReDoc endpoint
-@app.get("/redoc")
-async def get_redoc():
-    return FastAPI().redoc_html
+    return {"message": "Configuration updated"}
 
 
 @app.exception_handler(HTTPException)
@@ -102,7 +117,6 @@ async def http_exception_handler(request, exc):
     return JSONResponse(content={"error": exc.detail}, status_code=exc.status_code)
 
 
-# Start development server if module is executed
 if __name__ == "__main__":
     import uvicorn
 

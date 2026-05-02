@@ -16,4 +16,4 @@ COPY --from=builder /app /app
 
 EXPOSE 8000
 
-CMD ["python", "/app.py"]
+CMD ["python", "/api.py"]
