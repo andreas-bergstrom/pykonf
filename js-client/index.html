@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pykonf — JS Client Reference</title>
+<link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2/css/pico.min.css">
+<style>
+  pre { overflow: auto; max-height: 60vh; }
+  .error { color: var(--pico-del-color); }
+  #config-path { font-family: var(--pico-font-family-monospace); }
+</style>
+</head>
+<body>
+  <main class="container">
+    <h1>pykonf JS Client Reference</h1>
+
+    <article>
+      <header><strong>Connection</strong></header>
+      <div class="grid">
+        <label>
+          Server URL
+          <input type="url" id="server-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+        </label>
+        <label>
+          Read Key
+          <input type="text" id="read-key" placeholder="your read key">
+        </label>
+      </div>
+    </article>
+
+    <div class="grid">
+      <article>
+        <header><strong>Full Config</strong></header>
+        <button id="btn-fetch-all" class="secondary">GET /config</button>
+      </article>
+      <article>
+        <header><strong>Path Lookup</strong></header>
+        <div class="grid">
+          <label>
+            Path
+            <input type="text" id="config-path" value="featureflags" placeholder="e.g. featureflags/payment">
+          </label>
+          <label>
+            <br>
+            <button id="btn-fetch-path" class="secondary">GET /config/{path}</button>
+          </label>
+        </div>
+      </article>
+    </div>
+
+    <article>
+      <header><strong>Response</strong></header>
+      <pre id="response"><code>Press a button above to fetch config…</code></pre>
+    </article>
+  </main>
+  <script src="index.js"></script>
+</body>
+</html>
