@@ -59,6 +59,10 @@ Or via CLI:
 claude mcp add --transport http pykonf http://localhost:8000/mcp
 ```
 
+## JS Client Reference App
+
+A reference implementation at `js-client/` shows how a JS frontend reads config via the REST API. It's **not** part of the Python package (excluded by `pyproject.toml`'s `packages.find.where = ["src"]`). No build tools needed — open `index.html` directly.
+
 ## Tests
 
 ```sh
