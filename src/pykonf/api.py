@@ -71,6 +71,11 @@ def verify_secret(secret_key: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def verify_read_key(read_key: str | None) -> None:
+    if read_key != cfg.READ_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 def mutate(do):
     try:
         cfg.check_mutation_rate()
@@ -86,7 +91,8 @@ async def health():
 
 
 @app.get("/config")
-async def read_config():
+async def read_config(read_key: str | None = Header(None)):
+    verify_read_key(read_key)
     return JSONResponse(
         content=cfg.json_data,
         media_type="application/json",
@@ -95,7 +101,8 @@ async def read_config():
 
 
 @app.get("/config/{path:path}")
-async def read_config_path(path: str):
+async def read_config_path(path: str, read_key: str | None = Header(None)):
+    verify_read_key(read_key)
     try:
         value = cfg.get_at_path(cfg.json_data, path)
     except KeyError as e:

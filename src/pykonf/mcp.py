@@ -8,8 +8,10 @@ mcp_server = FastMCP("pykonf")
 
 
 @mcp_server.tool()
-def read_config(path: str | None = None) -> str:
-    """Read the current configuration. Optionally provide a path (e.g. 'featureflags/payment') to read a subtree."""
+def read_config(read_key: str, path: str | None = None) -> str:
+    """Read the current configuration. Optionally provide a path (e.g. 'featureflags/payment') to read a subtree. Requires read_key for authorization."""
+    if read_key != cfg.READ_KEY:
+        return "Error: Unauthorized"
     try:
         if path:
             value = cfg.get_at_path(cfg.json_data, path)
@@ -21,8 +23,10 @@ def read_config(path: str | None = None) -> str:
 
 
 @mcp_server.tool()
-def list_keys(path: str | None = None) -> str:
-    """List the keys at the given path (or root)."""
+def list_keys(read_key: str, path: str | None = None) -> str:
+    """List the keys at the given path (or root). Requires read_key for authorization."""
+    if read_key != cfg.READ_KEY:
+        return "Error: Unauthorized"
     try:
         if path:
             target = cfg.get_at_path(cfg.json_data, path)

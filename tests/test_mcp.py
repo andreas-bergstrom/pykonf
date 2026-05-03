@@ -79,36 +79,47 @@ class TestMCPSession:
         assert "delete_key" in tool_names
         assert "list_keys" in tool_names
 
+    def test_read_config_unauthorized(self, client):
+        cfg.json_data = {"secret": "value"}
+        sid = _init_session(client)
+        data = _call_tool(client, sid, "read_config", {"read_key": "wrong", "path": None})
+        assert "Unauthorized" in data["result"]["content"][0]["text"]
+
     def test_read_config_empty(self, client):
         sid = _init_session(client)
-        data = _call_tool(client, sid, "read_config", {})
+        data = _call_tool(client, sid, "read_config", {"read_key": "test-read-key"})
         text = data["result"]["content"][0]["text"]
         assert json.loads(text) == {}
 
     def test_read_config_with_data(self, client):
         cfg.json_data = {"db": {"host": "localhost"}, "port": 8080}
         sid = _init_session(client)
-        data = _call_tool(client, sid, "read_config", {})
+        data = _call_tool(client, sid, "read_config", {"read_key": "test-read-key"})
         text = data["result"]["content"][0]["text"]
         assert json.loads(text) == {"db": {"host": "localhost"}, "port": 8080}
 
     def test_read_config_path(self, client):
         cfg.json_data = {"featureflags": {"payment": "enabled", "debug": False}}
         sid = _init_session(client)
-        data = _call_tool(client, sid, "read_config", {"path": "featureflags/payment"})
+        data = _call_tool(client, sid, "read_config", {"read_key": "test-read-key", "path": "featureflags/payment"})
         text = data["result"]["content"][0]["text"]
         assert json.loads(text) == "enabled"
 
     def test_read_config_path_not_found(self, client):
         cfg.json_data = {"a": 1}
         sid = _init_session(client)
-        data = _call_tool(client, sid, "read_config", {"path": "a/x"})
+        data = _call_tool(client, sid, "read_config", {"read_key": "test-read-key", "path": "a/x"})
         assert "Error" in data["result"]["content"][0]["text"]
+
+    def test_list_keys_unauthorized(self, client):
+        sid = _init_session(client)
+        data = _call_tool(client, sid, "list_keys", {"read_key": "wrong"})
+        assert "Unauthorized" in data["result"]["content"][0]["text"]
 
     def test_list_keys_root(self, client):
         cfg.json_data = {"a": 1, "b": {"c": 2}}
         sid = _init_session(client)
-        data = _call_tool(client, sid, "list_keys", {})
+        data = _call_tool(client, sid, "list_keys", {"read_key": "test-read-key"})
         keys = data["result"]["content"][0]["text"].split("\n")
         assert "a" in keys
         assert "b" in keys
@@ -116,7 +127,7 @@ class TestMCPSession:
     def test_list_keys_nested(self, client):
         cfg.json_data = {"a": {"b": 1, "c": 2}}
         sid = _init_session(client)
-        data = _call_tool(client, sid, "list_keys", {"path": "a"})
+        data = _call_tool(client, sid, "list_keys", {"read_key": "test-read-key", "path": "a"})
         keys = data["result"]["content"][0]["text"].split("\n")
         assert "b" in keys
         assert "c" in keys
@@ -124,7 +135,7 @@ class TestMCPSession:
     def test_list_keys_on_scalar(self, client):
         cfg.json_data = {"a": 42}
         sid = _init_session(client)
-        data = _call_tool(client, sid, "list_keys", {"path": "a"})
+        data = _call_tool(client, sid, "list_keys", {"read_key": "test-read-key", "path": "a"})
         assert "not a dict" in data["result"]["content"][0]["text"]
 
     def test_set_value(self, client):

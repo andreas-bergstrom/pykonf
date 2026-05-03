@@ -7,6 +7,10 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 if SECRET_KEY is None:
     raise RuntimeError("SECRET_KEY environment variable is not set.")
 
+READ_KEY = os.environ.get("READ_KEY")
+if READ_KEY is None:
+    raise RuntimeError("READ_KEY environment variable is not set.")
+
 CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
 
 MUTATION_COOLDOWN = float(os.environ.get("MUTATION_COOLDOWN", "60"))

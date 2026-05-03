@@ -7,6 +7,7 @@ import pytest
 from starlette.testclient import TestClient
 
 os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["READ_KEY"] = "test-read-key"
 os.environ["DISABLE_RATE_LIMIT"] = "true"
 os.environ["CONFIG_FILE"] = tempfile.mktemp(suffix=".json")
 
@@ -45,3 +46,8 @@ def client() -> Iterator[TestClient]:
 @pytest.fixture
 def auth_headers() -> dict[str, str]:
     return {"secret-key": "test-secret-key"}
+
+
+@pytest.fixture
+def read_headers() -> dict[str, str]:
+    return {"read-key": "test-read-key"}

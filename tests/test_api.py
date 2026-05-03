@@ -8,46 +8,61 @@ def test_health(client):
     assert resp.json() == {"status": "ok"}
 
 
-def test_read_config_empty(client):
+def test_read_config_no_auth(client):
     resp = client.get("/config")
+    assert resp.status_code == 401
+
+
+def test_read_config_wrong_key(client):
+    resp = client.get("/config", headers={"read-key": "wrong"})
+    assert resp.status_code == 401
+
+
+def test_read_config_empty(client, read_headers):
+    resp = client.get("/config", headers=read_headers)
     assert resp.status_code == 200
     assert resp.json() == {}
 
 
-def test_read_config_with_data(client):
+def test_read_config_with_data(client, read_headers):
     cfg.json_data = {"db": {"host": "localhost", "port": 5432}, "feature": "enabled"}
-    resp = client.get("/config")
+    resp = client.get("/config", headers=read_headers)
     assert resp.status_code == 200
     assert resp.json() == {"db": {"host": "localhost", "port": 5432}, "feature": "enabled"}
 
 
-def test_read_config_cache_control(client):
-    resp = client.get("/config")
+def test_read_config_cache_control(client, read_headers):
+    resp = client.get("/config", headers=read_headers)
     assert resp.headers.get("cache-control") == "max-age=60"
 
 
-def test_read_config_path_nested(client):
+def test_read_config_path_nested(client, read_headers):
     cfg.json_data = {"featureflags": {"payment": "enabled"}}
-    resp = client.get("/config/featureflags/payment")
+    resp = client.get("/config/featureflags/payment", headers=read_headers)
     assert resp.status_code == 200
     assert resp.json() == "enabled"
 
 
-def test_read_config_path_single(client):
+def test_read_config_path_single(client, read_headers):
     cfg.json_data = {"host": "localhost"}
-    resp = client.get("/config/host")
+    resp = client.get("/config/host", headers=read_headers)
     assert resp.status_code == 200
     assert resp.json() == "localhost"
 
 
-def test_read_config_path_404(client):
+def test_read_config_path_no_auth(client):
     resp = client.get("/config/nonexistent")
+    assert resp.status_code == 401
+
+
+def test_read_config_path_404(client, read_headers):
+    resp = client.get("/config/nonexistent", headers=read_headers)
     assert resp.status_code == 404
 
 
-def test_read_config_path_deep_404(client):
+def test_read_config_path_deep_404(client, read_headers):
     cfg.json_data = {"a": {"b": 1}}
-    resp = client.get("/config/a/x")
+    resp = client.get("/config/a/x", headers=read_headers)
     assert resp.status_code == 404
 
 
@@ -137,8 +152,8 @@ def test_put_config_invalid_body(client, auth_headers):
     assert resp.status_code == 422
 
 
-def test_read_config_path_preserves_types(client):
+def test_read_config_path_preserves_types(client, read_headers):
     cfg.json_data = {"num": 42, "flag": True, "items": [1, 2, 3]}
-    assert client.get("/config/num").json() == 42
-    assert client.get("/config/flag").json() is True
-    assert client.get("/config/items").json() == [1, 2, 3]
+    assert client.get("/config/num", headers=read_headers).json() == 42
+    assert client.get("/config/flag", headers=read_headers).json() is True
+    assert client.get("/config/items", headers=read_headers).json() == [1, 2, 3]

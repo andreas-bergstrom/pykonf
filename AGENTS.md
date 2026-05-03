@@ -3,28 +3,28 @@
 ## Run the API
 
 ```sh
-SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value python api.py
+SECRET_KEY=secret READ_KEY=read DATA_FEATUREFLAGS_PAYMENT=value python api.py
 ```
 
 Or after `pip install -e .`:
 
 ```sh
-SECRET_KEY=secret DATA_FEATUREFLAGS_PAYMENT=value pykonf
+SECRET_KEY=secret READ_KEY=read DATA_FEATUREFLAGS_PAYMENT=value pykonf
 ```
 
-Required env vars: `SECRET_KEY` (checked at import time, absent raises).
+Required env vars: `SECRET_KEY` and `READ_KEY` (checked at import time, absent raises).
 
 Config is seeded from `DATA_*` env vars at startup (underscore-separated keys → nested dict), then persisted to `CONFIG_FILE` (default `config.json`).
 
 ## REST API Endpoints
 
-All mutation endpoints (`PUT`, `POST`, `DELETE`) require a `secret_key` header matching `SECRET_KEY` and are rate-limited to 1/minute (shared across all mutations).
+Read endpoints (`GET`) require a `read_key` header matching `READ_KEY`. Mutation endpoints (`PUT`, `POST`, `DELETE`) require a `secret_key` header matching `SECRET_KEY` and are rate-limited to 1/minute (shared across all mutations).
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/health` | — | Health check |
-| `GET` | `/config` | — | Returns full config (Cache-Control: max-age=60) |
-| `GET` | `/config/{path}` | — | Read nested value (e.g. `/config/featureflags/payment`) |
+| `GET` | `/config` | `read_key` | Returns full config (Cache-Control: max-age=60) |
+| `GET` | `/config/{path}` | `read_key` | Read nested value (e.g. `/config/featureflags/payment`) |
 | `PUT` | `/config` | `secret_key` | Deep-merge partial update |
 | `POST` | `/config/{path}` | `secret_key` | Set value at path. Body: `{"value": any}` or raw JSON |
 | `DELETE` | `/config/{path}` | `secret_key` | Remove key at path |
@@ -35,8 +35,8 @@ The MCP server runs on the same process at `/mcp` (Streamable HTTP transport). C
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_config` | `path` (optional) | Read full config or subtree at slash-separated path |
-| `list_keys` | `path` (optional) | List keys under a path |
+| `read_config` | `read_key`, `path` (optional) | Read full config or subtree at slash-separated path |
+| `list_keys` | `read_key`, `path` (optional) | List keys under a path |
 | `set_value` | `path`, `value`, `secret_key` | Set value at path |
 | `delete_key` | `path`, `secret_key` | Delete key at path |
 
